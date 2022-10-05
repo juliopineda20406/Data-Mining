@@ -1,0 +1,66 @@
+#LIBRERIAS
+library(rpart)
+library(dplyr)
+library(MLmetrics)
+library(ranger)
+library(pROC)
+library(ggplot2)
+library(caTools)
+library(rpart.plot)
+
+#DIRECTORIO DE DATOS
+setwd("~/Desktop/S. 6 🎳/🧑‍💻Data Mining & Machine Learning/labs/evaluacion modelos")
+
+df <- read.csv("BankChurners.csv", sep = ";", stringsAsFactors = T)
+
+#ESTRUCTURA DE DATOS
+str(df)
+
+#ELIMINAR VARIABLES QUE NO SIRVEN
+df <- df %>%
+  select(-CLIENTNUM)
+
+#VARIABLES MAS SIGNIFICATIVAS DEL MODELOS
+variables_relevantes <- ranger(Attrition_Flag ~ ., data = df, importance = "impurity")
+sort(importance(variables_relevantes))
+
+#ANALISIS EXPLORATORIO DE DATOS
+#categoria de la tarjeta de credito
+ggplot(df, aes(x = Card_Category)) + geom_bar(aes(fill = Attrition_Flag))
+
+#cantidad de contactos hechas al cliente
+ggplot(df, aes(x = Contacts_Count_12_mon)) + geom_bar(aes(fill = Attrition_Flag))
+
+#PARTICION DE DATOS EN ENTRENAMIENTO Y PRUEBA
+sample <- sample.split(df$Attrition_Flag, SplitRatio = 0.8)
+
+#CONSTRUCCION DE SETS
+entrenamiento <- subset(df, sample == T)
+prueba <- subset(df, sample == F)
+
+#ARBOL DE DECISION
+arbol <- rpart(Attrition_Flag ~ ., method = "class", data = entrenamiento
+               , control = rpart.control(minsplit = 10, minbucket = 5))
+prp(arbol)
+#PREDICCIONES
+predicciones <- predict(arbol, prueba)
+
+#CONVERTIR EL DF DE PREDICCIONES
+predicciones <- as.data.frame(predicciones)
+
+#CURVA ROC DEL MODELO
+roc_arbol <- roc(prueba$Attrition_Flag, predicciones$`Attrited Customer`, plot = TRUE)
+roc_arbol
+
+#FUNCION PARA HACER UN PUNTO DE CORTE
+p_corte <- function(x){
+  if(x >= 0.5){
+    return("Attrited Customer")
+  }else{
+    return("Existing Customer")
+  }
+}
+
+#MATRIZ DE CONFUSION
+predicciones$Attrition_Flag <- sapply(predicciones$`Attrited Customer`, p_corte)
+confusionMatrix(factor(predicciones$Attrition_Flag), prueba$Attrition_Flag)
